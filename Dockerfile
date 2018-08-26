@@ -1,6 +1,8 @@
 FROM golang:alpine3.7
 MAINTAINER Laurent Erignoux lerignoux@gmail.com
 
+RUN apk update && apk add git
+
 WORKDIR /go/src
 COPY . .
 
