@@ -21,6 +21,98 @@ type ServerConf struct {
     host     string  `json:"host"`
 }
 
+type AllData struct {
+	  rapidViewId int `json:"rapidViewId"`
+		statistics
+		columnsData ColumnsData
+		orderData OrderData
+		sprintsData SprintData
+}
+
+type ColumnData struct {
+
+}
+
+type IssuesData struct {
+	rapidViewId string
+	activeFilters []Filters
+}
+
+type OrderData struct {
+	rapidViewId int
+	rankable bool
+	rankCustomFieldId int
+}
+
+type SprintData struct {}
+
+type Filters struct {
+	id: int
+}
+
+type Issue struct {
+	id int
+	key string
+	hidden bool
+	typeName string
+	typeId string
+	summary string
+	typeUrl string
+	done bool
+	assignee string
+	assigneeName string
+	avatarUrl string
+	hasCustomUserAvatar bool
+	color bool
+	epic string
+	epicField Epic
+	estimateStatistic Statistic
+	trackingStatistic Statistic
+	statusId string
+	statusName string
+	statusUrl string
+	status Status
+	fixVersions []FixVersion
+	projectId int
+	linkedPagesCount string
+	extraFields []ExtraField
+}
+
+type ExtraField struct {
+	id: string
+	labe: string
+	editable: string
+	renderer: string
+	html: string
+}
+
+type FixVersion struct {
+
+}
+
+type Status struct {
+	id string
+	name string
+	description string
+	iconUrl string
+	statusCategory StatusCategory
+}
+
+type StatusCategory struct {
+	id string
+	key string
+}
+
+
+type Epic struct {
+	id string
+	label string
+}
+
+type Statistic struct {
+
+}
+
 var configuration Configuration
 var httpClient = &http.Client{}
 
@@ -75,3 +167,5 @@ func FetchServerData(server ServerConf, initialRequest *http.Request) string {
 func MergeData(data ...string) string {
 	return "ok"
 }
+
+func mergeIssues(base IssueData, add IssueData) IssueData {}
