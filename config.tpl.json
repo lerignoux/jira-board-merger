@@ -2,6 +2,5 @@
   "servers": {
     "https://jira1/rest/api/v2": {},
     "https://jira1/rest/api/v2": {}
-  },
-  "aggregated_keys": ["issues"]
+  }
 }

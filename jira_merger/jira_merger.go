@@ -1,171 +1,239 @@
 package main
 
 import (
-    "bytes"
     "fmt"
-    "html"
     "log"
     "net/http"
     "encoding/json"
     "os"
+    "io/ioutil"
 
     "github.com/gorilla/mux"
 )
 
 type Configuration struct {
-    servers         []ServerConf `json:"array"`
-    aggregated_keys []string
+    Servers []ServerConf `json:"servers"`
+    Aggregated_keys []string `json:"aggregated_keys"`
+    Status_mapping []int `json:"status_mapping"`
 }
 
 type ServerConf struct {
-    host     string  `json:"host"`
+    Host string `json:"host"`
 }
 
 type AllData struct {
-	  rapidViewId int `json:"rapidViewId"`
-		statistics
-		columnsData ColumnsData
-		orderData OrderData
-		sprintsData SprintData
+	  RapidViewId int `json:"rapidViewId"`
+		Statistics Statistics `json:"statistics"`
+		ColumnsData ColumnsData `json:"columnsData"`
+		SwimlanesData SwimlanesData `json:"swimlanesData"`
+		IssuesData IssuesData `json:"issuesData"`
+		OrderData OrderData `json:"orderData"`
+		SprintsData SprintData `json:"sprintsData"`
 }
 
-type ColumnData struct {
+type Statistics struct {
+  FieldConfigured bool `json:"fieldConfigured"`
+  TypeId string `json:"typeId"`
+  Id string `json:"id"`
+  Name string `json:"name"`
+}
 
+type ColumnsData struct {
+  RapidViewId int `json:"rapidViewId"`
+  Columns []Columns `json:"columns"`
+}
+
+type Columns struct {
+  Id int `json:"id"`
+  Name string `json:"name"`
+  StatusIds []string `json:"statusIds"`
+  IsKanPlanColumn bool `json:"isKanPlanColumn"`
+}
+
+type SwimlanesData struct {
+  RapidViewId int `json:"rapidViewId"`
+  SwimlaneStrategy string `json:"swimlaneStrategy"`
 }
 
 type IssuesData struct {
-	rapidViewId string
-	activeFilters []Filters
+	RapidViewId int `json:"rapidViewId"`
+	ActiveFilters []ActiveFilters `json:"activeFilters"`
+  Issues []Issue `json:"issues"`
 }
 
 type OrderData struct {
-	rapidViewId int
-	rankable bool
-	rankCustomFieldId int
+	RapidViewId int `json:"rapidViewId"`
+	Rankable bool `json:"rankable"`
+	RankCustomFieldId int `json:"rankCustomFieldId"`
 }
 
-type SprintData struct {}
+type SprintData struct {
+  RapidViewId int `json:"rapidViewId"`
+  CanManageSprints bool `json:"canManageSprints"`
+  EtageData EtageData `json:"etageData"`
+}
 
-type Filters struct {
-	id: int
+type ActiveFilters struct {
+	Id int `json:"id"`
 }
 
 type Issue struct {
-	id int
-	key string
-	hidden bool
-	typeName string
-	typeId string
-	summary string
-	typeUrl string
-	done bool
-	assignee string
-	assigneeName string
-	avatarUrl string
-	hasCustomUserAvatar bool
-	color bool
-	epic string
-	epicField Epic
-	estimateStatistic Statistic
-	trackingStatistic Statistic
-	statusId string
-	statusName string
-	statusUrl string
-	status Status
-	fixVersions []FixVersion
-	projectId int
-	linkedPagesCount string
-	extraFields []ExtraField
+	Id int `json:"id"`
+	Key string `json:"key"`
+	Hidden bool `json:"hidden"`
+	TypeName string `json:"typeName"`
+	TypeId string `json:"typeId"`
+	Summary string `json:"summary"`
+	TypeUrl string `json:"typeUrl"`
+	Done bool `json:"done"`
+	Assignee string `json:"assignee"`
+	AssigneeName string `json:"assigneeName"`
+	AvatarUrl string `json:"avatarUrl"`
+	HasCustomUserAvatar bool `json:"hasCustomUserAvatar"`
+	Color string `json:"color"`
+	Epic string `json:"epic"`
+	EpicField Epic `json:"epicField"`
+	EstimateStatistic Statistic `json:"estimateStatistic"`
+	TrackingStatistic Statistic `json:"trackingStatistic"`
+	StatusId string `json:"statusId"`
+	StatusName string `json:"statusName"`
+	StatusUrl string `json:"statusUrl"`
+	Status Status `json:"status"`
+	FixVersions []FixVersion `json:"fixVersions"`
+	ProjectId int `json:"projectId"`
+	LinkedPagesCount int `json:"linkedPagesCount"`
+	ExtraFields []ExtraField `json:"extraFields"`
 }
 
 type ExtraField struct {
-	id: string
-	labe: string
-	editable: string
-	renderer: string
-	html: string
+	Id string `json:"id"`
+	Label string `json:"label"`
+	Editable bool `json:"editable"`
+	Renderer string `json:"renderer"`
+	Html string `json:"html"`
 }
 
 type FixVersion struct {
-
 }
 
 type Status struct {
-	id string
-	name string
-	description string
-	iconUrl string
-	statusCategory StatusCategory
+	Id string `json:"id"`
+	Name string `json:"name"`
+	Description string `json:"description"`
+	IconUrl string `json:"iconUrl"`
+	StatusCategory StatusCategory `json:"statusCategory"`
 }
 
 type StatusCategory struct {
-	id string
-	key string
+	Id string `json:"id"`
+	Key string `json:"key"`
 }
-
 
 type Epic struct {
-	id string
-	label string
+	Id string `json:"id"`
+	Label string `json:"label"`
 }
+
 
 type Statistic struct {
 
+}
+
+type Sprints struct {
+	Id string `json:"id"`
+	Name string `json:"name"`
+  Sequence int `json:"sequence"`
+  State string `json:"state"`
+  LinkedPagesCount int `json:"linkedPagesCount"`
+  StartDate string `json:"startDate"`
+  EndDate string `json:"endDate"`
+  CompleteDate string `json:"completeDate"`
+  CanUpdateSprint bool `json:"canUpdateSprint"`
+  DaysRemaining int `json:"daysRemaining"`
+}
+
+type EtageData struct {
+  RapidViewId int `json:"rapidViewId"`
+  IssueCount int `json:"issueCount"`
+  LastUpdated int `json:"lastUpdated"`
+  QuickFilters string `json:"quickFilters"`
+  Sprints int `json:"sprints"`
+  Etag string `json:"etag"`
 }
 
 var configuration Configuration
 var httpClient = &http.Client{}
 
 func main() {
-		loadConfig("config.json")
+		configuration = loadConfig("/go/src/jira_merger/config.json")
     router := mux.NewRouter().StrictSlash(true)
     router.HandleFunc("/allData", GetAllData)
     log.Fatal(http.ListenAndServe(":8080", router))
 }
 
-func loadConfig(configName string) {
-	file, _ := os.Open(configName)
-	defer file.Close()
-	decoder := json.NewDecoder(file)
-	configuration := Configuration{}
-	err := decoder.Decode(&configuration)
-	if err != nil {
-	  fmt.Println("error:", err)
-	}
+func loadConfig(file string) Configuration {
+  var config Configuration
+  configFile, err := os.Open(file)
+  defer configFile.Close()
+  if err != nil {
+      fmt.Println(err.Error())
+  }
+  jsonParser := json.NewDecoder(configFile)
+  jsonParser.Decode(&config)
+  return config
+}
+
+func DecodeData(jsonData []byte) AllData {
+  allData := AllData{}
+  jsonErr := json.Unmarshal(jsonData, &allData)
+  if jsonErr != nil {
+    log.Fatal(jsonErr)
+  }
+  return allData
 }
 
 func GetAllData(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
-    data := make([]string, len(configuration.servers))
-    for i, server := range configuration.servers {
-      data[i] = FetchServerData(server, r)
+    var mergedData AllData
+    data := make([]AllData, len(configuration.Servers))
+    for i, server := range configuration.Servers {
+      data[i] = DecodeData(FetchServerData(server, r))
     }
-    merged := MergeData(data...)
-    json.NewEncoder(w).Encode(merged)
+    mergedData = MergeData(data...)
+    json.NewEncoder(w).Encode(mergedData)
 }
 
-func FetchServerData(server ServerConf, initialRequest *http.Request) string {
-	initialRequest.URL.Query().Set("hostname", server.host)
-	req, err := http.NewRequest("GET", initialRequest.URL.String(), nil)
+func FetchServerData(server ServerConf, initialRequest *http.Request) []byte {
+	initialRequest.URL.Query().Set("hostname", server.Host)
+	req, err := http.NewRequest("GET", server.Host + initialRequest.URL.String(), nil)
 	if err != nil {
-      fmt.Printf("Error : %s", err)
+      fmt.Printf("Error fetching server data : %s\n", err)
   }
 	resp, err := httpClient.Do(req)
 	if err != nil {
-      fmt.Printf("Error : %s", err)
+      fmt.Printf("Error performing server request : %s\n", err)
   }
-  fmt.Println("resp")
+  defer resp.Body.Close()
 
-  var b bytes.Buffer
-  _, err = b.ReadFrom(resp.Body)
-  if err != nil {
-      log.Fatal("Error : %s", err)
-  }
-	return b.String()
+  body, readErr := ioutil.ReadAll(resp.Body)
+  if readErr != nil {
+		log.Fatal("Error reading server response : %s\n", readErr)
+	}
+
+	return body
 }
 
-func MergeData(data ...string) string {
-	return "ok"
+func MergeData(dataArray ...AllData) AllData {
+  for _, data := range dataArray[1:len(dataArray)] {
+    dataArray[0] = merge(dataArray[0], data)
+  }
+	return dataArray[0]
 }
 
-func mergeIssues(base IssueData, add IssueData) IssueData {}
+func merge(base AllData, add AllData) AllData {
+  base.IssuesData.Issues = append(base.IssuesData.Issues, add.IssuesData.Issues...)
+  return base
+}
+
+func MapStatus(initial int) int {
+  return initial
+}
