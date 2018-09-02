@@ -13,8 +13,12 @@ import (
 
 type Configuration struct {
     Servers []ServerConf `json:"servers"`
-    Aggregated_keys []string `json:"aggregated_keys"`
-    Status_mapping []int `json:"status_mapping"`
+    Jira Jira `json:"jira"`
+}
+
+type Jira struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
 }
 
 type ServerConf struct {
@@ -205,6 +209,7 @@ func GetAllData(w http.ResponseWriter, r *http.Request) {
 func FetchServerData(server ServerConf, initialRequest *http.Request) []byte {
 	initialRequest.URL.Query().Set("hostname", server.Host)
 	req, err := http.NewRequest("GET", server.Host + initialRequest.URL.String(), nil)
+  req.SetBasicAuth(configuration.Jira.Username, configuration.Jira.passwd)
 	if err != nil {
       fmt.Printf("Error fetching server data : %s\n", err)
   }
