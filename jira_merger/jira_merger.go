@@ -3,10 +3,12 @@ package main
 import (
     "fmt"
     "log"
+    "crypto/tls"
     "net/http"
     "encoding/json"
     "os"
     "io/ioutil"
+    "time"
 
     "github.com/gorilla/mux"
 )
@@ -22,17 +24,19 @@ type Jira struct {
 }
 
 type ServerConf struct {
-    Host string `json:"host"`
+    Query string `json:"query"`
+    Type string `json:"type"`
 }
 
 type AllData struct {
-	  RapidViewId int `json:"rapidViewId"`
-		Statistics Statistics `json:"statistics"`
-		ColumnsData ColumnsData `json:"columnsData"`
-		SwimlanesData SwimlanesData `json:"swimlanesData"`
-		IssuesData IssuesData `json:"issuesData"`
-		OrderData OrderData `json:"orderData"`
-		SprintsData SprintData `json:"sprintsData"`
+    RapidViewId int `json:"rapidViewId"`
+    Statistics Statistics `json:"statistics"`
+    ColumnsData ColumnsData `json:"columnsData"`
+    SwimlanesData SwimlanesData `json:"swimlanesData"`
+    IssuesData IssuesData `json:"issuesData"`
+    OrderData OrderData `json:"orderData"`
+    SprintsData SprintData `json:"sprintsData"`
+    EtagData EtagData `json:"etagData"`
 }
 
 type Statistics struct {
@@ -73,8 +77,8 @@ type OrderData struct {
 
 type SprintData struct {
   RapidViewId int `json:"rapidViewId"`
+  Sprints []Sprint `json:"sprints"`
   CanManageSprints bool `json:"canManageSprints"`
-  EtageData EtageData `json:"etageData"`
 }
 
 type ActiveFilters struct {
@@ -143,9 +147,9 @@ type Statistic struct {
 
 }
 
-type Sprints struct {
-	Id string `json:"id"`
-	Name string `json:"name"`
+type Sprint struct {
+  Id int `json:"id"`
+  Name string `json:"name"`
   Sequence int `json:"sequence"`
   State string `json:"state"`
   LinkedPagesCount int `json:"linkedPagesCount"`
@@ -156,12 +160,12 @@ type Sprints struct {
   DaysRemaining int `json:"daysRemaining"`
 }
 
-type EtageData struct {
+type EtagData struct {
   RapidViewId int `json:"rapidViewId"`
   IssueCount int `json:"issueCount"`
   LastUpdated int `json:"lastUpdated"`
   QuickFilters string `json:"quickFilters"`
-  Sprints int `json:"sprints"`
+  Sprints string `json:"sprints"`
   Etag string `json:"etag"`
 }
 
@@ -169,9 +173,10 @@ var configuration Configuration
 var httpClient = &http.Client{}
 
 func main() {
-		configuration = loadConfig("/go/src/jira_merger/config.json")
+    configuration = loadConfig("/go/src/jira_merger/config.json")
+    fmt.Printf("Configuration: %v\n", configuration)
     router := mux.NewRouter().StrictSlash(true)
-    router.HandleFunc("/allData", GetAllData)
+    router.HandleFunc("/jira/rest/greenhopper/1.0/xboard/work/allData.json", GetAllData)
     log.Fatal(http.ListenAndServe(":8080", router))
 }
 
@@ -187,33 +192,60 @@ func loadConfig(file string) Configuration {
   return config
 }
 
-func DecodeData(jsonData []byte) AllData {
+func DecodeData(jsonData []byte, config ServerConf) AllData {
   allData := AllData{}
-  jsonErr := json.Unmarshal(jsonData, &allData)
-  if jsonErr != nil {
-    log.Fatal(jsonErr)
+  if config.Type == "issues" {
+    jsonErr := json.Unmarshal(jsonData, &allData.IssuesData)
+    if jsonErr != nil {
+      log.Fatal(jsonErr)
+    }
+  } else {
+    jsonErr := json.Unmarshal(jsonData, &allData)
+    if jsonErr != nil {
+      log.Fatal(jsonErr)
+    }
   }
+  fmt.Printf("Data Decoded: %v\n", allData)
   return allData
 }
 
 func GetAllData(w http.ResponseWriter, r *http.Request) {
     var mergedData AllData
     data := make([]AllData, len(configuration.Servers))
+    fmt.Printf("%d server found\n", len(configuration.Servers))
     for i, server := range configuration.Servers {
-      data[i] = DecodeData(FetchServerData(server, r))
+      data[i] = DecodeData(FetchServerData(server, r), server)
     }
+
     mergedData = MergeData(data...)
     json.NewEncoder(w).Encode(mergedData)
 }
 
 func FetchServerData(server ServerConf, initialRequest *http.Request) []byte {
-	initialRequest.URL.Query().Set("hostname", server.Host)
-	req, err := http.NewRequest("GET", server.Host + initialRequest.URL.String(), nil)
-  req.SetBasicAuth(configuration.Jira.Username, configuration.Jira.passwd)
+        fmt.Printf("Fetching server data: %s\n", server.Query)
+        defaultTransport := http.DefaultTransport.(*http.Transport)
+        // Create new Transport that ignores self-signed SSL
+        httpClientWithSelfSignedTLS := &http.Transport{
+            Proxy:                 defaultTransport.Proxy,
+            DialContext:           defaultTransport.DialContext,
+            MaxIdleConns:          defaultTransport.MaxIdleConns,
+            IdleConnTimeout:       defaultTransport.IdleConnTimeout,
+            ExpectContinueTimeout: defaultTransport.ExpectContinueTimeout,
+            TLSHandshakeTimeout:   defaultTransport.TLSHandshakeTimeout,
+            TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+        }
+        client := &http.Client{
+            Transport: httpClientWithSelfSignedTLS,
+            Timeout:   3 * time.Second,
+        }
+
+	req, err := http.NewRequest("GET", server.Query, nil)
+  req.SetBasicAuth(configuration.Jira.Username, configuration.Jira.Password)
 	if err != nil {
       fmt.Printf("Error fetching server data : %s\n", err)
   }
-	resp, err := httpClient.Do(req)
+        fmt.Printf("Sending request\n")
+	resp, err := client.Do(req)
 	if err != nil {
       fmt.Printf("Error performing server request : %s\n", err)
   }
@@ -224,7 +256,7 @@ func FetchServerData(server ServerConf, initialRequest *http.Request) []byte {
 		log.Fatal("Error reading server response : %s\n", readErr)
 	}
 
-	return body
+      return body
 }
 
 func MergeData(dataArray ...AllData) AllData {
