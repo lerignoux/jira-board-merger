@@ -268,6 +268,13 @@ func MergeData(dataArray ...AllData) AllData {
 
 func merge(base AllData, add AllData) AllData {
   base.IssuesData.Issues = append(base.IssuesData.Issues, add.IssuesData.Issues...)
+  // FIXME We should do something more clever, mapping duplicated statusIds onto a new one and adapting issues data.
+  for i, _ := range base.ColumnsData.Columns[1:len(base.ColumnsData.Columns)]{
+    base.ColumnsData.Columns[i].StatusIds = append(
+      base.ColumnsData.Columns[i].StatusIds,
+      add.ColumnsData.Columns[i].StatusIds...
+    )
+  }
   return base
 }
 
